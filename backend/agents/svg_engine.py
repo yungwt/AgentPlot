@@ -16,6 +16,7 @@ class SVGEngineAgent:
             api_key=llm_settings.LLM_API_KEY,
             base_url=llm_settings.LLM_BASE_URL,
             temperature=0.2,
+            max_tokens=4096,
         )
 
         self.prompt = ChatPromptTemplate.from_messages([
@@ -32,6 +33,7 @@ class SVGEngineAgent:
 - viewBox 自适应内容，保留合理边距
 - 颜色使用现代配色，对比度清晰
 - 文字使用 sans-serif 字体
+- 保证生成后的SVG图渲染出来的内容清晰可读，无重叠
 
 【尺寸约束】
 - viewBox 必须严格按照给定的 svg_width × svg_height 设置
@@ -55,9 +57,16 @@ class SVGEngineAgent:
         if "```" in text:
             text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
             text = re.sub(r"\n?```$", "", text)
-        # 提取 <svg>...</svg>；找不到时退回全文
-        match = re.search(r"<svg[\s\S]*?</svg>", text)
-        return match.group(0) if match else text
+        # 提取 <svg>...</svg>；用贪婪 + rfind，避免在嵌套 <svg> / 文本中出现的
+        # </svg> 字面量处被提前截断；找不到时退回全文
+        match = re.search(r"<svg[\s\S]*</svg>", text)
+        if match:
+            return match.group(0)
+        start = text.find("<svg")
+        end = text.rfind("</svg>")
+        if start != -1 and end > start:
+            return text[start:end + len("</svg>")]
+        return text
 
     def run(self, image_spec: dict) -> str:
         return asyncio.run(self.arun(image_spec))
