@@ -1,13 +1,13 @@
-import json
-
-from langchain_openai import ChatOpenAI, OpenAI
+"""大纲 Agent：把用户需求重构为 PPT 文案大纲（结构化输出）。"""
 from langchain_core.prompts import ChatPromptTemplate
-from config.settings import llm_settings
-from src.schemas.content_schema import PPTContentOutline
+from langchain_openai import ChatOpenAI
+
+from backend.core.settings import llm_settings
+from backend.schemas.content_schema import PPTContentOutline
+
 
 class PPTPlannerAgent:
     def __init__(self, enable_web_search: bool = False, enable_thinking: bool = False):
-
         self.enable_web_search = enable_web_search
         self.enable_thinking = enable_thinking
 
@@ -16,36 +16,30 @@ class PPTPlannerAgent:
             "model": llm_settings.LLM_MODEL,
             "api_key": llm_settings.LLM_API_KEY,
             "base_url": llm_settings.LLM_BASE_URL,
-            "temperature": 0.1
+            "temperature": 0.1,
         }
 
-        
         # 构建 extra_body
         extra_body = {}
-
-        # 思考模式
         if self.enable_thinking:
             extra_body["enable_thinking"] = True
-
-        # 联网搜索：通过 tools 传递
         if self.enable_web_search:
             extra_body["enable_search"] = True
 
-        # 统一传递
+        # 统一传递（ChatOpenAI 会把 extra_body 平铺进请求体顶层，
+        # 不能再包一层 {"extra_body": ...}，否则服务端收到嵌套字段静默忽略）
         if extra_body:
-            llm_kwargs["extra_body"] = {"extra_body": extra_body}
+            llm_kwargs["extra_body"] = extra_body
 
         self.llm = ChatOpenAI(**llm_kwargs)
         self.structured_llm = self.llm.with_structured_output(PPTContentOutline)
-        
 
         self.prompt_template = ChatPromptTemplate.from_messages([
             ("system", self._get_system_prompt()),
-            ("user", self._get_user_prompt())
+            ("user", self._get_user_prompt()),
         ])
-        
         self.chain = self.prompt_template | self.structured_llm
-    
+
     def _get_system_prompt(self) -> str:
         return """你是一位殿堂级的商务演示（PPT）策划专家。
 
@@ -82,7 +76,7 @@ class PPTPlannerAgent:
                 - bullet_points 每页最多6项，每项不超过25字
                 - 确保 JSON 格式完全合法，可以被解析
                 """
-    
+
     def _get_user_prompt(self) -> str:
         return """请为以下主题策划一份共 {page_count} 页的 PPT 大纲。
 
@@ -100,30 +94,8 @@ class PPTPlannerAgent:
         if not 1 <= page_count <= 20:
             raise ValueError("页数必须在 1-20 之间")
 
-        try:
-            # 先获取完整的 LLM 响应（含 metadata）
-            messages = self.prompt_template.format_messages(
-                user_request=user_request,
-                page_count=page_count
-            )
-            # full_response = self.llm.invoke(messages)
-            
-            # # 提取搜索日志
-            # if self.enable_web_search:
-            #     metadata = full_response.response_metadata if hasattr(full_response, 'response_metadata') else {}
-                
-            #     print("\n" + "="*60)
-            #     print("🔍 联网搜索日志:")
-            #     print("="*60)
-            #     print(json.dumps(metadata, ensure_ascii=False, indent=2))
-            #     print("="*60 + "\n")
-                
-            #     self.last_search_log = metadata
-            
-            # 结构化输出解析
-            result = self.structured_llm.invoke(messages)
-            return result
-            
-        except Exception as e:
-            print(f"生成大纲失败: {e}")
-            raise
+        messages = self.prompt_template.format_messages(
+            user_request=user_request,
+            page_count=page_count,
+        )
+        return self.structured_llm.invoke(messages)

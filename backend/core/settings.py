@@ -2,12 +2,11 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# 基础路径配置 (利用 Path 自动计算项目根目录)
-
-BASE_DIR = Path(__file__).resolve().parent.parent
+# 项目根目录：backend/core/settings.py 的祖父级
+BASE_DIR = Path(__file__).resolve().parents[2]
 dotenv_path = BASE_DIR / ".env"
 load_dotenv(dotenv_path=dotenv_path)
-# 过程产物输出目录
+
 OUTPUT_DIR = BASE_DIR / "output"
 
 # 大模型 (LLM) API 配置

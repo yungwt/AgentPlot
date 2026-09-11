@@ -1,10 +1,12 @@
-# src/agents/content_extender.py
+"""内容扩写 Agent：把大纲的 bullet_points 扩写成页内文本块。"""
 import json
 import re
-from langchain_openai import ChatOpenAI
+
 from langchain_core.prompts import ChatPromptTemplate
-from config.settings import llm_settings
-from src.schemas.enriched_schema import EnrichedSlideContent, EnrichedOutline
+from langchain_openai import ChatOpenAI
+
+from backend.core.settings import llm_settings
+from backend.schemas.enriched_schema import EnrichedOutline, EnrichedSlideContent
 
 
 class PPTContentWriterAgent:
@@ -13,14 +15,14 @@ class PPTContentWriterAgent:
             model=llm_settings.LLM_MODEL,
             api_key=llm_settings.LLM_API_KEY,
             base_url=llm_settings.LLM_BASE_URL,
-            temperature=0.4
+            temperature=0.4,
         )
-        
+
         self.prompt_template = ChatPromptTemplate.from_messages([
             ("system", self._get_system_prompt()),
-            ("user", "请根据完整PPT大纲，对每一页进行深度扩写：\n\n{outline_json}")
+            ("user", "请根据完整PPT大纲，对每一页进行深度扩写：\n\n{outline_json}"),
         ])
-        
+
         self.chain = self.prompt_template | self.llm
 
     def _get_system_prompt(self) -> str:
@@ -75,16 +77,16 @@ class PPTContentWriterAgent:
     def run(self, outline: dict) -> EnrichedOutline:
         try:
             response = self.chain.invoke({
-                "outline_json": json.dumps(outline, ensure_ascii=False)
+                "outline_json": json.dumps(outline, ensure_ascii=False),
             })
             clean_json = self._clean_json_string(response.content)
             parsed_data = json.loads(clean_json)
-            
+
             slides = [EnrichedSlideContent(**s) for s in parsed_data["slides"]]
             return EnrichedOutline(
                 topic=outline.get("topic", ""),
                 total_pages=len(slides),
-                slides=slides
+                slides=slides,
             )
         except Exception as e:
             print(f"❌ ContentWriterAgent 扩充失败: {e}")

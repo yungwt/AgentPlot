@@ -1,32 +1,31 @@
-# agents/layout_planner.py
+"""布局 Agent：为每页规划版式、文字块与配图，并归一化页码。"""
 import json
 import re
-from typing import Any, Dict
-from langchain_openai import ChatOpenAI
+
 from langchain_core.prompts import ChatPromptTemplate
-from config.settings import llm_settings
-from src.schemas.layout_schema import SlideLayout, LayoutOutline
+from langchain_openai import ChatOpenAI
+
+from backend.core.settings import llm_settings
+from backend.schemas.layout_schema import LayoutOutline, SlideLayout
 
 
 class LayoutPlannerAgent:
-    def __init__(self, style_hint: dict = None):
-        self.style_hint = style_hint or {}
+    def __init__(self):
         self.llm = ChatOpenAI(
             model=llm_settings.LLM_MODEL,
             api_key=llm_settings.LLM_API_KEY,
             base_url=llm_settings.LLM_BASE_URL,
-            temperature=0.4
+            temperature=0.4,
         )
-        
+
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", self._get_system_prompt()),
-            ("user", "请根据完整PPT内容，自由规划每页布局：\n\n{enriched_json}")
+            ("user", "请根据完整PPT内容，自由规划每页布局：\n\n{enriched_json}"),
         ])
         self.chain = self.prompt | self.llm
 
     def _get_system_prompt(self) -> str:
-        
-        return """你是一位资深的PPT视觉设计师。你的任务是为每页幻灯片自由规划布局，你会收到关于内容页的明细，但封面页需要你自己安要求生成，最终生成的页数将是内容页数+1（封面）。
+        return """你是一位资深的PPT视觉设计师。你的任务是为每页幻灯片自由规划布局，你会收到关于内容页的明细，但封面页需要你自己按要求生成，最终生成的页数将是内容页数+1（封面）。
 
 【唯一硬性约束】
 - **文字块之间不能重叠**
@@ -34,6 +33,7 @@ class LayoutPlannerAgent:
 - 幻灯片尺寸为 13.33 × 7.5 英寸
 - 所有元素必须完全在画布内：0 ≤ x ≤ 13.33，0 ≤ y ≤ 7.5
 - 所有坐标(x, y)和尺寸(width, height)单位为英寸
+- 根据主题选择一个主题色,后续所有页面都要基于这个色调,尽量不要选择以白色作为主题色
 - 所有颜色值必须使用十六进制格式，如 #FFFFFF、#3498DB
 - 至少有一半的内容页要有图片
 - 每一页都有有合理的装饰元素
@@ -58,10 +58,11 @@ class LayoutPlannerAgent:
 - 标题：大字号（36-48pt），粗体
 - 副标题：中等字号（18-24pt），常规
 - 图片可选，需要就加，不需要就省略
+- 适当设计一些美化元素，使得封面不单调
 
 【内容页】
 - page_type 固定为 "content"
-- 版式自由选择：单栏、双栏、上下分割、网格、时间线等
+- 版式自由选择：单栏、双栏、上下分割、网格、时间线等,但是不能大量内容页使用同一个版式
 - 图片可选，需要就加，不需要就省略
 - decoration 可选
 
@@ -190,128 +191,75 @@ PNG 类型（视觉丰富、美观演示，用于配图和装饰）：
 """
 
     def _clean_json_string(self, raw_text: str) -> str:
-        """清理 LLM 返回的原始文本，提取 JSON"""
+        """去掉 markdown 代码块围栏"""
         text = raw_text.strip()
-        
-        # 1. 去掉 markdown 代码块
         if text.startswith("```"):
             text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
             text = re.sub(r"\n?```$", "", text)
-        
-        # 2. 提取 JSON（从第一个 { 开始，括号匹配）
-        start = text.find('{')
-        if start == -1:
-            return text
-        
-        # 3. 括号匹配提取完整 JSON
-        brace_count = 0
-        in_string = False
-        escape_next = False
-        end = -1
-        
-        for i, ch in enumerate(text[start:], start):
-            if escape_next:
-                escape_next = False
-                continue
-            if ch == '\\':
-                escape_next = True
-                continue
-            if ch == '"' and not escape_next:
-                in_string = not in_string
-                continue
-            if not in_string:
-                if ch == '{':
-                    brace_count += 1
-                elif ch == '}':
-                    brace_count -= 1
-                    if brace_count == 0:
-                        end = i + 1
-                        break
-        
-        if end == -1:
-            return text
-        
-        return text[start:end]
+        return text.strip()
 
-    def _repair_json(self, json_str: str) -> str:
-        """修复常见的 JSON 问题"""
-        # 1. 删除末尾多余的逗号（在 } 或 ] 前）
-        json_str = re.sub(r',\s*}', '}', json_str)
-        json_str = re.sub(r',\s*]', ']', json_str)
-        
-        # 2. 修复没有引号的键名
-        # 匹配类似 { key: value } 的情况，将 key 加上引号
-        json_str = re.sub(r'(\{|\,)\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*:', r'\1"\2":', json_str)
-        
-        # 3. 修复单引号（JSON 必须用双引号）
-        # 先处理字符串内的单引号，暂时替换成占位符
-        json_str = re.sub(r"'([^']*?)'", r'"\1"', json_str)
-        
-        # 4. 修复 page_number 为 0 的问题（改成 1）
-        json_str = re.sub(r'"page_number":\s*0,', '"page_number": 1,', json_str)
-        json_str = re.sub(r'"page_number":\s*0\s*}', '"page_number": 1}', json_str)
-        
-        return json_str
+    def _parse_json_with_fallback(self, raw_text: str) -> dict:
+        """解析 LLM 返回的 JSON：直接解析 → 括号截取 → json_repair 兜底。
 
-    def _parse_json_with_fallback(self, raw_text: str) -> Dict[str, Any]:
-        """尝试多种方式解析 JSON"""
-        # 先清理
-        json_str = self._clean_json_string(raw_text)
-        
-        # 尝试直接解析
+        不用正则去"修复"JSON：单引号替换等正则会把正文里的撇号一起改坏，
+        而 json_repair 能安全处理尾逗号、缺引号键名、前后夹杂的说明文字。
+        """
+        text = self._clean_json_string(raw_text)
+
         try:
-            return json.loads(json_str)
+            return json.loads(text)
         except json.JSONDecodeError:
             pass
-        
-        # 修复后解析
-        try:
-            repaired = self._repair_json(json_str)
-            return json.loads(repaired)
-        except json.JSONDecodeError:
-            pass
-        
-        # 打印错误信息用于调试
-        print(f"⚠️ 无法解析 JSON，原始内容（最后 300 字符）:")
-        print(json_str[-300:])
-        
-        # 尝试用 ast.literal_eval
-        try:
-            import ast
-            data = ast.literal_eval(json_str)
-            if isinstance(data, dict):
-                return data
-        except:
-            pass
-        
-        # 最后尝试：用 json_repair 库
-        try:
-            import json_repair
-            return json_repair.repair_json(json_str, return_objects=True)
-        except:
-            pass
-        
+
+        # 截取首个 { 到最后一个 } 之间的内容，去掉 JSON 前后的说明文字
+        start, end = text.find("{"), text.rfind("}")
+        if start != -1 and end > start:
+            try:
+                return json.loads(text[start:end + 1])
+            except json.JSONDecodeError:
+                pass
+
+        import json_repair
+        data = json_repair.repair_json(text, return_objects=True)
+        if isinstance(data, dict):
+            return data
+
+        print("⚠️ 无法解析 JSON，原始内容（最后 300 字符）:")
+        print(text[-300:])
         raise ValueError("无法解析 LLM 返回的 JSON，请检查原始输出")
+
+    def _normalize_page_numbers(self, parsed: dict) -> None:
+        """页码归一化：封面 = 0，内容页从 1 顺序递增。
+
+        提示词原设计就是封面第 0 页（图片文件名为 page_{N}，N 指第 N 个
+        内容页）。封面不能占 1，否则与首个内容页撞号，按页码定位会取错页。
+        按类型识别封面（而不是按下标），封面不在首位时也成立。
+        """
+        seen_cover = False
+        content_seq = 0
+        for slide in parsed.get("slides", []):
+            is_cover = (not seen_cover) and (
+                slide.get("page_type") == "cover"
+                or slide.get("layout_type") == "cover"
+            )
+            if is_cover:
+                slide["page_number"] = 0
+                seen_cover = True
+            else:
+                content_seq += 1
+                slide["page_number"] = content_seq
 
     def run(self, enriched: dict) -> LayoutOutline:
         response = self.chain.invoke({
-            "enriched_json": json.dumps(enriched, ensure_ascii=False)
+            "enriched_json": json.dumps(enriched, ensure_ascii=False),
         })
-        
-        print(f"LLM原始返回（前200字符）: {response.content[:200]}...")
-        
-        # 使用增强的 JSON 解析
+
         parsed = self._parse_json_with_fallback(response.content)
-        
-        # 修复页码从 0 开始的问题
-        if "slides" in parsed:
-            for i, slide in enumerate(parsed["slides"]):
-                if slide.get("page_number", 0) == 0:
-                    slide["page_number"] = i + 1
-        
+        self._normalize_page_numbers(parsed)
+
         slides = [SlideLayout(**s) for s in parsed["slides"]]
         return LayoutOutline(
             topic=enriched.get("topic", ""),
             total_pages=len(slides),
-            slides=slides
+            slides=slides,
         )

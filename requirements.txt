@@ -1,40 +1,29 @@
-AgentPlot/
-│
-├── app.py                      # Streamlit Web 应用主入口
-├── run.py                      # 命令行批量测试脚本
-├── requirements.txt            # 项目依赖（如有）
-│
-├── src/                        # 核心源码目录
-│   ├── __init__.py
-│   ├── agents/                 # 多智能体模块
-│   │   ├── __init__.py
-│   │   ├── planner.py          # 大纲生成 Agent
-│   │   ├── content_writer.py   # 内容扩写 Agent
-│   │   ├── layout_planner.py   # 布局规划 Agent
-│   │   ├── svg_engine.py       # SVG 图表生成 Agent
-│   │   └── png_engine.py       # PNG 图片生成 Agent
-│   └── schemas/                # Pydantic 数据模型
-│      ├── __init__.py
-│      ├── content_schema.py   # 内容相关模型
-│      ├── enriched_schema.py   # 内容增强模型
-│      └── layout_schema.py    # 布局相关模型
-│   
-│
-├── generation/                 # 生成模块
-│   ├── __init__.py
-│   └── ppt_builder.py          # PPT 文件生成器
-│
-├── config/                     # 配置文件
-│   ├── __init__.py
-│   └── settings.py             # API Key 等配置
-│
-└── output/                     # 输出目录
-    ├── session_xxxxxxxxx/             
-    │   ├── outline.json
-    │   ├── enriched.json
-    │   ├── layout.json
-    │   ├── images/
-    │   │   ├── page_1.svg
-    │   │   └── page_2.png
-    │   └── output.pptx
-    └── session_xxxxxxxxx/           
+# AgentPlot backend dependencies
+# Install:  pip install -r requirements.txt
+# After install (for SVG → PNG rendering):
+#     playwright install chromium
+
+# --- Backend API ---
+fastapi>=0.110
+uvicorn[standard]>=0.27
+python-multipart>=0.0.9
+
+# --- Data validation ---
+pydantic>=2.6
+
+# --- Environment / config ---
+python-dotenv>=1.0
+
+# --- LLM (OpenAI-compatible) ---
+langchain-openai>=0.1
+langchain-core>=0.1
+
+# --- PPT generation ---
+python-pptx>=0.6.21
+
+# --- SVG → PNG rendering (headless Chromium) ---
+playwright>=1.40
+
+# --- Image / data helpers ---
+Pillow>=10.0
+pandas>=2.0

@@ -1,10 +1,13 @@
-# agents/svg_engine.py
+"""SVG 图表引擎：调用 LLM 生成矢量图表代码。"""
+import asyncio
 import json
 import re
-from langchain_openai import ChatOpenAI
+
 from langchain_core.prompts import ChatPromptTemplate
-from config.settings import llm_settings
-import asyncio
+from langchain_openai import ChatOpenAI
+
+from backend.core.settings import llm_settings
+
 
 class SVGEngineAgent:
     def __init__(self):
@@ -12,12 +15,12 @@ class SVGEngineAgent:
             model=llm_settings.LLM_MODEL,
             api_key=llm_settings.LLM_API_KEY,
             base_url=llm_settings.LLM_BASE_URL,
-            temperature=0.2  
+            temperature=0.2,
         )
-        
+
         self.prompt = ChatPromptTemplate.from_messages([
             ("system", self._system_prompt()),
-            ("user", "请根据图片需求描述生成SVG：\n\n{image_spec}")
+            ("user", "请根据图片需求描述生成SVG：\n\n{image_spec}"),
         ])
         self.chain = self.prompt | self.llm
 
@@ -46,34 +49,30 @@ class SVGEngineAgent:
 """
 
     def _extract_svg(self, raw: str) -> str:
+        """从 LLM 返回文本中提取 <svg>...</svg>"""
         text = raw.strip()
         # 去 markdown 代码块
         if "```" in text:
             text = re.sub(r"^```[a-zA-Z]*\n?", "", text)
             text = re.sub(r"\n?```$", "", text)
-        # 提取 <svg>...</svg>
+        # 提取 <svg>...</svg>；找不到时退回全文
         match = re.search(r"<svg[\s\S]*?</svg>", text)
-        svg = match.group(0) if match else text
-    
-        # 去重复属性（简单处理：保留第一个）
-        svg = re.sub(r'(y2="[^"]*")\s+y2="[^"]*"', r'\1', svg)
-        
-        return svg
-    
+        return match.group(0) if match else text
+
     def run(self, image_spec: dict) -> str:
         return asyncio.run(self.arun(image_spec))
 
     async def arun(self, image_spec: dict) -> str:
         width_in = image_spec.get("size", {}).get("width", 5.5)
         height_in = image_spec.get("size", {}).get("height", 4.0)
-        
+
         prompt_data = {
             **image_spec,
             "svg_width": int(width_in * 96),
             "svg_height": int(height_in * 96),
         }
-        
+
         response = await self.chain.ainvoke({
-            "image_spec": json.dumps(prompt_data, ensure_ascii=False)
+            "image_spec": json.dumps(prompt_data, ensure_ascii=False),
         })
         return self._extract_svg(response.content)

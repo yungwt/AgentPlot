@@ -1,0 +1,54 @@
+/* Global CSS tokens — 统一颜色 / 间距 / 字号 / 圆角。
+   各组件用 var(--xxx) 引用，避免散落硬编码。 */
+:root {
+  /* 背景层级（暗色主题） */
+  --bg-0: #18181c;
+  --bg-1: #20222a;
+  --bg-2: #2c2e35;
+  --bg-3: #1a1c22;
+
+  /* 文字 */
+  --text-1: #e8e8e8;
+  --text-2: #b0b0b0;
+  --text-3: #888;
+
+  /* 强调色 */
+  --accent: #3498db;
+  --success: #18a058;
+  --warning: #f0a020;
+  --error: #d03050;
+
+  /* 字号 */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-base: 13px;
+  --fs-md: 14px;
+  --fs-lg: 16px;
+  --fs-xl: 18px;
+  --fs-2xl: 22px;
+
+  /* 间距 */
+  --gap-xs: 4px;
+  --gap-sm: 8px;
+  --gap-md: 12px;
+  --gap-lg: 16px;
+  --gap-xl: 24px;
+
+  /* 圆角 */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+
+  /* 分隔元素用色（边框、分割线）—— 比 bg-2 亮一档，让暗色主题里出现可见分隔 */
+  --border: #3a3d46;
+
+  /* 阴影与发光 */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.25);
+  --brand-gradient: linear-gradient(135deg, #3498db 0%, #5dade2 100%);
+  --brand-glow: rgba(52, 152, 219, 0.25);
+  --success-glow: rgba(24, 160, 88, 0.45);
+
+  /* 卡片 */
+  --card-bg: var(--bg-1);
+  --card-border: 1px solid var(--border);
+}
